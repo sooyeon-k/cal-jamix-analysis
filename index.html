@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Orders and Deliveries Matching Analysis</title>
+
+  <!-- External Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 30px;
+      background-color: #f9f9f9;
+    }
+
+    h1, h2, h3 {
+      color: #333;
+    }
+
+    .section {
+      margin-bottom: 25px;
+    }
+
+    input[type="file"] {
+      padding: 8px;
+      margin-top: 5px;
+    }
+
+    .download-section {
+      margin-top: 30px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      max-width: 300px;
+    }
+
+    .download-group {
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      padding: 10px;
+      background-color: #fff;
+    }
+
+    .download-button {
+      width: 100%;
+      background-color: #007BFF;
+      color: white;
+      padding: 10px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .download-button:hover {
+      background-color: #0056b3;
+    }
+
+    .download-menu {
+      margin-top: 10px;
+      display: none;
+      gap: 10px;
+    }
+
+    .download-menu button {
+      padding: 8px;
+      font-size: 13px;
+      flex: 1;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    #loadingSpinner {
+      display: none;
+      text-align: center;
+      margin-top: 20px;
+    }
+
+    .tabs {
+      margin-top: 40px;
+    }
+
+    .tab-button {
+      margin-right: 10px;
+      padding: 10px 20px;
+      cursor: pointer;
+      border: none;
+      background-color: #ddd;
+      border-radius: 4px;
+    }
+
+    .tab-button:hover {
+      background-color: #ccc;
+    }
+
+    .tab-content {
+      margin-top: 20px;
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    canvas {
+      margin-bottom: 40px;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Upload Orders and Deliveries</h1>
+
+  <div class="section">
+    <h3>Orders:</h3>
+    <input type="file" id="ordersInput" multiple accept=".csv, .xls, .xlsx">
+  </div>
+
+  <div class="section">
+    <h3>Deliveries:</h3>
+    <input type="file" id="deliveriesInput" multiple accept=".csv, .xls, .xlsx">
+  </div>
+
+  <div class="download-section">
+    <div class="download-group">
+      <button class="download-button" onclick="toggleMenu('menuMerged')">Download Full Merged Dataset</button>
+      <div class="download-menu" id="menuMerged">
+        <button onclick="downloadCleanedData()">CSV</button>
+        <button onclick="downloadData('merged', true)">Excel</button>
+      </div>
+    </div>    
+
+    <div class="download-group">
+      <button class="download-button" onclick="toggleMenu('menuUnmatchedOrders')">Download Unmatched Orders</button>
+      <div class="download-menu" id="menuUnmatchedOrders">
+        <button onclick="downloadData('unmatchedOrders')">CSV</button>
+        <button onclick="downloadData('unmatchedOrders', true)">Excel</button>
+      </div>
+    </div>
+
+    <div class="download-group">
+      <button class="download-button" onclick="toggleMenu('menuUnmatchedDeliveries')">Download Unmatched Deliveries</button>
+      <div class="download-menu" id="menuUnmatchedDeliveries">
+        <button onclick="downloadData('unmatchedDeliveries')">CSV</button>
+        <button onclick="downloadData('unmatchedDeliveries', true)">Excel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="loadingSpinner">
+    <img src="https://i.imgur.com/llF5iyg.gif" alt="Loading..." width="50" />
+    <p>Processing files, please wait...</p>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-button" onclick="openTab('summaryTab')">Summary</button>
+    <button class="tab-button" onclick="openTab('visualizationTab')">Visualizations</button>
+  </div>
+
+  <div id="summaryTab" class="tab-content">
+    <h2>Summary</h2>
+    <div id="summaryOutput">Upload your files to see the summary here.</div>
+  </div>
+
+  <div id="visualizationTab" class="tab-content">
+    <h2>Visualizations</h2>
+
+    <h3>Top Suppliers with Unmatched Orders</h3>
+    <canvas id="chartCanvas1" width="400" height="200"></canvas>
+
+    <h3>Top Suppliers with Unmatched Deliveries</h3>
+    <canvas id="chartCanvas3" width="400" height="200"></canvas>
+
+    <h3>Top Stores with Unmatched Orders</h3>
+    <canvas id="chartCanvas2" width="400" height="200"></canvas>
+
+    <h3>Top Stores with Unmatched Deliveries</h3>
+    <canvas id="chartCanvas4" width="400" height="200"></canvas>
+
+    <h3>Unmatched Orders vs Deliveries Over Time</h3>
+    <canvas id="chartCanvas5" width="600" height="300"></canvas>
+
+    <h3>Top DSD Deliveries by Supplier</h3>
+    <canvas id="chartCanvas6" width="400" height="200"></canvas>
+
+    <h3>Top DSD Deliveries by Store</h3>
+    <canvas id="chartCanvas7" width="400" height="200"></canvas>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    window.openTab = function(tabId) {
+      document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+      document.getElementById(tabId).classList.add('active');
+    };
+
+    window.toggleMenu = function(menuId) {
+      document.querySelectorAll('.download-menu').forEach(menu => {
+        if (menu.id !== menuId) menu.style.display = 'none';
+      });
+      const menu = document.getElementById(menuId);
+      menu.style.display = (menu.style.display === 'flex') ? 'none' : 'flex';
+    };
+  </script>
+</body>
+</html>
