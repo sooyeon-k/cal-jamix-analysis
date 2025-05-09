@@ -1,13 +1,4 @@
-const dsdSuppliers = [
-  'pepperidge farms',
-  'kikka',
-  'golden malted',
-  'nuco2 llc',
-  'wonder ice cream llc'
-];
-const dsdPepsiStores = [
-  'gbc', 'den', 'bear market', 'cub market', 'browns', 'cubby'
-];
+
 
 document.addEventListener('DOMContentLoaded', () => {
   let ordersFiles = [];
@@ -168,14 +159,27 @@ document.addEventListener('DOMContentLoaded', () => {
     finalCleanedData = matchedFull;
   }
 
-  function isDSD(delivery) {
-    const supplier = normalize(delivery['Supplier']);
-    const store = normalize(delivery['Store']);
-    if (dsdSuppliers.includes(supplier)) return true;
-    if (supplier.includes('pepsi') && dsdPepsiStores.includes(store)) return true;
-    return false;
-  }
+  function isDSDSupplier(supplier, store) {
+    const normSupplier = normalize(supplier);
+    const normStore = normalize(store);
   
+    const dsdSuppliersList = [
+      'pepperidge farms',
+      'kikka sushi',
+      'golden malted',
+      'nuco2 llc',
+      'wonder ice cream llc'
+    ];
+  
+    const dsdPepsiStoresList = [
+      'gbc', 'den', 'bear market', 'cub market', 'browns', 'cubby'
+    ];
+  
+    const isPepsi = normSupplier.includes('pepsi');
+    const isPepsiStore = dsdPepsiStoresList.includes(normStore);
+  
+    return dsdSuppliersList.some(dsd => normSupplier.includes(dsd)) || (isPepsi && isPepsiStore);
+  }
   
 
   function showSummary() {
@@ -213,19 +217,13 @@ document.addEventListener('DOMContentLoaded', () => {
   
     // 3. Separate DSD unmatched deliveries
     const dsdUnmatchedDeliveries = unmatchedDeliveriesRaw.filter(delivery => {
-      const supplier = normalize(delivery['Supplier']);
-      const store = normalize(delivery['Store']);
-      const isPepsiAtValidStore = supplier.includes('pepsi') && pepsiStores.includes(store);
-      return dsdSuppliers.includes(supplier) || isPepsiAtValidStore;
+      return isDSDSupplier(delivery['Supplier'], delivery['Store']);
     });
   
     // 4. Non-DSD unmatched deliveries
     const unmatchedDeliveries = unmatchedDeliveriesRaw.filter(delivery => {
-      const supplier = normalize(delivery['Supplier']);
-      const store = normalize(delivery['Store']);
-      const isPepsiAtValidStore = supplier.includes('pepsi') && pepsiStores.includes(store);
-      return !(dsdSuppliers.includes(supplier) || isPepsiAtValidStore);
-    });
+      return !isDSDSupplier(delivery['Supplier'], delivery['Store']);
+    });    
   
     // 5. Orders with multiple deliveries
     const deliveryCount = {};
@@ -264,15 +262,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
 function showVisualizations() {
-  const unmatchedOrders = matchedFull.filter(row => !row.Matched);
-
-  const dsdSuppliers = [
-    'pepperidge farms', 'kikka', 'golden malted', 'nuco2 llc', 'wonder ice cream llc', 'pepsi bottling group inc'
-  ].map(s => s.toLowerCase());
-
-  const dsdPepsiStores = [
-    'golden bear cafe', 'den', 'bear market', 'cub market', 'browns cafe', 'cubby'
-  ].map(s => s.toLowerCase());
+  const unmatchedOrders = matchedFull.filter(row => {
+    return !row.Matched && !isDSDSupplier(row['Supplier'], row['Store']);
+  });
 
   const unmatchedDeliveriesRaw = deliveriesFull.filter(delivery => {
     return !ordersFull.some(order =>
@@ -281,19 +273,11 @@ function showVisualizations() {
   });
 
   const unmatchedDeliveries = unmatchedDeliveriesRaw.filter(delivery => {
-    const supplier = normalize(delivery['Supplier']);
-    const store = normalize(delivery['Store']);
-    const isPepsi = supplier.includes('pepsi');
-    const isPepsiStore = dsdPepsiStores.includes(store);
-    return !(dsdSuppliers.includes(supplier) || (isPepsi && isPepsiStore));
-  });
+    return !isDSDSupplier(delivery['Supplier'], delivery['Store']);
+  });  
 
   const dsdDeliveries = unmatchedDeliveriesRaw.filter(delivery => {
-    const supplier = normalize(delivery['Supplier']);
-    const store = normalize(delivery['Store']);
-    const isPepsi = supplier.includes('pepsi');
-    const isPepsiStore = dsdPepsiStores.includes(store);
-    return dsdSuppliers.includes(supplier) || (isPepsi && isPepsiStore);
+    return isDSDSupplier(delivery['Supplier'], delivery['Store']);
   });
 
   // CHART 1: Unmatched Orders by Supplier
