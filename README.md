@@ -56,7 +56,3 @@ No installation required. Just open the link and upload your files.
 - [PapaParse](https://www.papaparse.com/) – CSV parser
 - [SheetJS (XLSX)](https://sheetjs.com/) – Excel read/write
 - [Chart.js](https://www.chartjs.org/) – Visualization
-
----
-
-Made with ❤ by Sooyeon Kim — empowering non-technical teams with data access.
