@@ -609,135 +609,144 @@ function showVisualizations() {
     }
   };
 
-window.submitFinancialAnalysis = function () {
-  const fileInput = document.getElementById("deliveriesInput");
-  const months = Array.from(document.getElementById("monthSelect").selectedOptions)
-  .map(opt => parseInt(opt.value))
-  .filter(m => !isNaN(m));
-
-  const years = Array.from(document.getElementById("yearSelect").selectedOptions)
-  .map(opt => parseInt(opt.value))
-  .filter(y => !isNaN(y));
-
-
-  if (!fileInput.files.length || months.length === 0 || years.length === 0) {
-    alert("Please select a file, at least one month, and at least one year.");
-    return;
-  }
-
-  const file = fileInput.files[0];
-  const reader = new FileReader();
-
-  reader.onload = function (e) {
-    const data = new Uint8Array(e.target.result);
-    const workbook = XLSX.read(data, { type: "array" });
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-    const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-
-    const headers = rawData[1];
-    const rows = rawData.slice(2).filter(row => row.join('').trim() !== '' && !row.includes('TOTAL'));
-
-    const df = rows.map(row => {
-      const obj = {};
-      headers.forEach((header, idx) => {
-        obj[header?.toString().trim()] = row[idx];
-      });
-      return obj;
-    });
-
-    const deliveryDateCol = "Delivery date";
-    const priceCol = "Price";
-
-    df.forEach(row => {
-      const raw = String(row[deliveryDateCol] || "").split(" ")[0];
-      row[deliveryDateCol] = new Date(raw);
-      row[priceCol] = parseFloat(row[priceCol]) || 0;
-    });
-
-    function findLastSunday(y, m, monday = false, lastDay = false) {
-      if (lastDay) {
-        return new Date(y, m - 1, new Date(y, m, 0).getDate());
-      }
-      if (m === 12) {
-        y += 1; m = 1;
-      } else {
-        m += 1;
-      }
-      let d = new Date(y, m - 1, 1);
-      let day = d.getDay();
-      d.setDate(d.getDate() - (day === 0 ? 7 : day));
-      if (monday) d.setDate(d.getDate() + 1);
-      return d;
-    }
-
-    const results = [];
-
-    years.forEach(year => {
-      months.forEach(month => {
-        const fiscalBeg = new Date(`${month}/1/${year}`);
-        let diningBeg;
-
-        if (month === 1) {
-          diningBeg = findLastSunday(year - 1, 12, true);
-        } else if (year === 2024 && month === 7) {
-          diningBeg = fiscalBeg;
-        } else {
-          diningBeg = findLastSunday(year, month - 1, true);
-        }
-
-        const fiscalEnd = findLastSunday(year, month, false, true);
-        const diningEnd = findLastSunday(year, month);
-
-        const fiscal = df.filter(row => row[deliveryDateCol] >= fiscalBeg && row[deliveryDateCol] <= fiscalEnd)
-          .reduce((sum, row) => sum + row[priceCol], 0);
+  window.submitFinancialAnalysis = function () {
+    const fileInput = document.getElementById("deliveriesInput");
+    const months = Array.from(document.getElementById("monthSelect").selectedOptions)
+      .map(opt => parseInt(opt.value))
+      .filter(m => !isNaN(m));
   
-        const dining = df.filter(row => row[deliveryDateCol] >= diningBeg && row[deliveryDateCol] <= diningEnd)
-          .reduce((sum, row) => sum + row[priceCol], 0);
-
-        const diff = Math.abs(dining - fiscal);
-
-        results.push({
-          year,
-          month,
-          "Month / Year": `${month}/${year}`,
-          "Dining Finances": dining.toFixed(2),
-          "Fiscal Finances": fiscal.toFixed(2),
-          "Absolute Differences": diff.toFixed(2)
+    const years = Array.from(document.getElementById("yearSelect").selectedOptions)
+      .map(opt => parseInt(opt.value))
+      .filter(y => !isNaN(y));
+  
+    if (!fileInput.files.length || months.length === 0 || years.length === 0) {
+      alert("Please select a file, at least one month, and at least one year.");
+      return;
+    }
+  
+    const file = fileInput.files[0];
+    const reader = new FileReader();
+  
+    reader.onload = function (e) {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: "array" });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+  
+      const headers = rawData[1];
+      const rows = rawData.slice(2).filter(row => row.join('').trim() !== '' && !row.includes('TOTAL'));
+  
+      const df = rows.map(row => {
+        const obj = {};
+        headers.forEach((header, idx) => {
+          obj[header?.toString().trim()] = row[idx];
+        });
+        return obj;
+      });
+  
+      const deliveryDateCol = "Delivery date";
+      const priceCol = "Price";
+  
+      // Correct date parsing
+      df.forEach(row => {
+        const raw = row[deliveryDateCol];
+        let parsedDate;
+  
+        if (typeof raw === 'number') {
+          parsedDate = new Date(Math.round((raw - 25569) * 86400 * 1000));
+        } else {
+          const str = String(raw || "").split(" ")[0];
+          parsedDate = new Date(str);
+        }
+  
+        row[deliveryDateCol] = parsedDate;
+        row[priceCol] = parseFloat(row[priceCol]) || 0;
+      });
+  
+      function findLastSunday(y, m, monday = false, lastDay = false) {
+        if (lastDay) {
+          return new Date(y, m - 1, new Date(y, m, 0).getDate());
+        }
+        if (m === 12) {
+          y += 1; m = 1;
+        } else {
+          m += 1;
+        }
+        let d = new Date(y, m - 1, 1);
+        let day = d.getDay();
+        d.setDate(d.getDate() - (day === 0 ? 7 : day));
+        if (monday) d.setDate(d.getDate() + 1);
+        return d;
+      }
+  
+      const results = [];
+  
+      years.forEach(year => {
+        months.forEach(month => {
+          const fiscalBeg = new Date(`${month}/1/${year}`);
+          let diningBeg;
+  
+          if (month === 1) {
+            diningBeg = findLastSunday(year - 1, 12, true);
+          } else if (year === 2024 && month === 7) {
+            diningBeg = fiscalBeg;
+          } else {
+            diningBeg = findLastSunday(year, month - 1, true);
+          }
+  
+          const fiscalEnd = findLastSunday(year, month, false, true);
+          const diningEnd = findLastSunday(year, month);
+  
+          const fiscal = df.filter(row => row[deliveryDateCol] >= fiscalBeg && row[deliveryDateCol] <= fiscalEnd)
+            .reduce((sum, row) => sum + row[priceCol], 0);
+  
+          const dining = df.filter(row => row[deliveryDateCol] >= diningBeg && row[deliveryDateCol] <= diningEnd)
+            .reduce((sum, row) => sum + row[priceCol], 0);
+  
+          const diff = Math.abs(dining - fiscal);
+  
+          results.push({
+            year,
+            month,
+            "Month / Year": `${month}/${year}`,
+            "Dining Finances": dining.toFixed(2),
+            "Fiscal Finances": fiscal.toFixed(2),
+            "Absolute Differences": diff.toFixed(2)
+          });
         });
       });
-    });
-
-    const outputDiv = document.getElementById("financialResults");
-    outputDiv.innerHTML = "";
-
-    results.forEach(result => {
-      const table = document.createElement("table");
-      table.classList.add("financial-table");
-
-      const title = document.createElement("h3");
-      title.textContent = `Financial Analysis for ${result["Month / Year"]}`;
-      outputDiv.appendChild(title);
-
-      const headerRow = document.createElement("tr");
-      Object.keys(result).slice(2).forEach(key => {
-        const th = document.createElement("th");
-        th.textContent = key;
-        headerRow.appendChild(th);
+  
+      const outputDiv = document.getElementById("financialResults");
+      outputDiv.innerHTML = "";
+  
+      results.forEach(result => {
+        const table = document.createElement("table");
+        table.classList.add("financial-table");
+  
+        const title = document.createElement("h3");
+        title.textContent = `Financial Analysis for ${result["Month / Year"]}`;
+        outputDiv.appendChild(title);
+  
+        const headerRow = document.createElement("tr");
+        Object.keys(result).slice(2).forEach(key => {
+          const th = document.createElement("th");
+          th.textContent = key;
+          headerRow.appendChild(th);
+        });
+        table.appendChild(headerRow);
+  
+        const dataRow = document.createElement("tr");
+        Object.values(result).slice(2).forEach(val => {
+          const td = document.createElement("td");
+          td.textContent = val;
+          dataRow.appendChild(td);
+        });
+        table.appendChild(dataRow);
+        outputDiv.appendChild(table);
       });
-      table.appendChild(headerRow);
-
-      const dataRow = document.createElement("tr");
-      Object.values(result).slice(2).forEach(val => {
-        const td = document.createElement("td");
-        td.textContent = val;
-        dataRow.appendChild(td);
-      });
-      table.appendChild(dataRow);
-      outputDiv.appendChild(table);
-    });
-  };
-
-  reader.readAsArrayBuffer(file);
-  };
+    };
+  
+    reader.readAsArrayBuffer(file);
+  };  
 });
