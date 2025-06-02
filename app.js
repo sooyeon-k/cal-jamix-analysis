@@ -8,6 +8,85 @@ document.addEventListener('DOMContentLoaded', () => {
   let matchedFull = [];
   let finalCleanedData = [];
 
+  let activeFilters = {
+    stores: []
+  };
+
+  let filteredOrders = [];
+  let filteredDeliveries = [];
+
+  document.getElementById('storeFilterButton').addEventListener('click', applyFilters);
+
+  document.getElementById('clearFilterButton').addEventListener('click', () => {
+    const storeFilter = document.getElementById('storeFilter');
+    Array.from(storeFilter.options).forEach(option => option.selected = false);
+  
+    // Clear filters and reapply with full data
+    activeFilters.stores = [];
+    filteredOrders = ordersFull;
+    filteredDeliveries = deliveriesFull;
+    cleanAndMatchData();
+    showSummary();
+    showVisualizations();
+    openTab('summaryTab');
+  });  
+
+  function populateStoreFilter() {
+    const allStores = new Set([
+      ...ordersFull.map(row => normalize(row.Store)),
+      ...deliveriesFull.map(row => normalize(row.Store))
+    ]);
+
+    const storeFilter = document.getElementById('storeFilter');
+    storeFilter.innerHTML = '';
+
+    allStores.forEach(store => {
+      const option = document.createElement('option');
+      option.value = store;
+      option.textContent = store;
+      storeFilter.appendChild(option);
+    });
+  }
+
+  
+  function applyFilters() {
+    const storeSelect = document.getElementById('storeFilter');
+    activeFilters.stores = Array.from(storeSelect.selectedOptions).map(opt => normalize(opt.value));
+  
+    // Save filtered globally
+    filteredOrders = ordersFull.filter(row => passesFilters(row));
+    filteredDeliveries = deliveriesFull.filter(row => passesFilters(row));
+  
+    // Rematch based on filters
+    matchedFull = filteredOrders.map(order => {
+      const matchingDelivery = filteredDeliveries.find(delivery =>
+        normalize(delivery['PO nos.']) === normalize(order['No.']) &&
+        normalize(delivery['Store']) === normalize(order['Store'])
+      );
+  
+      return {
+        ...order,
+        Matched: !!matchingDelivery,
+        Delivery_No: matchingDelivery ? matchingDelivery['No.'] : null,
+        Delivery_PO_nos: matchingDelivery ? matchingDelivery['PO nos.'] : null,
+        Delivery_Store: matchingDelivery ? matchingDelivery['Store'] : null
+      };
+    });
+  
+    finalCleanedData = matchedFull;
+  
+    showSummary();
+    showVisualizations();
+    openTab('summaryTab');
+  }
+  
+  
+
+  function passesFilters(row) {
+    const storeMatch = activeFilters.stores.length === 0 || activeFilters.stores.includes(normalize(row.Store));
+    return storeMatch;
+  }
+  
   document.getElementById('ordersInput').addEventListener('change', function(event) {
     ordersFiles = Array.from(event.target.files);
     checkBothUploaded();
@@ -35,12 +114,16 @@ document.addEventListener('DOMContentLoaded', () => {
       .then(([ordersData, deliveriesData]) => {
         ordersFull = ordersData.flat();
         deliveriesFull = deliveriesData.flat();
+        filteredOrders = ordersFull;
+        filteredDeliveries = deliveriesFull;
+        populateStoreFilter();
         cleanAndMatchData();
         showSummary();
         showVisualizations();
         hideLoading();
         alert('Files successfully processed!');
       })
+      
       .catch(err => {
         hideLoading();
         alert('Error processing files: ' + err.message);
@@ -183,8 +266,10 @@ document.addEventListener('DOMContentLoaded', () => {
   
 
   function showSummary() {
-    const totalOrders = ordersFull.length;
-    const totalDeliveries = deliveriesFull.length;
+    // const filteredOrders = ordersFull.filter(row => passesFilters(row));
+    // const filteredDeliveries = deliveriesFull.filter(row => passesFilters(row));
+    const totalOrders = filteredOrders.length;
+    const totalDeliveries = filteredDeliveries.length;
   
     const dsdSuppliers = [
       'pepperidge farms',
@@ -204,15 +289,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   
     // 1. Identify unmatched orders
-    const unmatchedOrders = ordersFull.filter(order => {
+    const unmatchedOrders = filteredOrders.filter(order => {
       const orderNo = normalize(order['No.']);
-      return !deliveriesFull.some(delivery => normalize(delivery['PO nos.']) === orderNo);
+      return !filteredDeliveries.some(delivery => normalize(delivery['PO nos.']) === orderNo);
     });
   
     // 2. Identify unmatched deliveries
-    const unmatchedDeliveriesRaw = deliveriesFull.filter(delivery => {
+    const unmatchedDeliveriesRaw = filteredDeliveries.filter(delivery => {
       const poNo = normalize(delivery['PO nos.']);
-      return !ordersFull.some(order => normalize(order['No.']) === poNo);
+      return !filteredOrders.some(order => normalize(order['No.']) === poNo);
     });
   
     // 3. Separate DSD unmatched deliveries
@@ -223,11 +308,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // 4. Non-DSD unmatched deliveries
     const unmatchedDeliveries = unmatchedDeliveriesRaw.filter(delivery => {
       return !isDSDSupplier(delivery['Supplier'], delivery['Store']);
-    });    
+    });
   
-    // 5. Orders with multiple deliveries
+    // 5. Orders with multiple deliveries (filtered only)
     const deliveryCount = {};
-    deliveriesFull.forEach(delivery => {
+    filteredDeliveries.forEach(delivery => {
       const poNo = normalize(delivery['PO nos.']);
       if (poNo) {
         deliveryCount[poNo] = (deliveryCount[poNo] || 0) + 1;
@@ -250,8 +335,8 @@ document.addEventListener('DOMContentLoaded', () => {
       <p><strong>Percent Orders without Deliveries:</strong> ${percentOrdersWithoutDeliveries}%</p>
       <p><strong>Percent Deliveries without Orders (excluding DSD):</strong> ${percentDeliveriesWithoutOrders}%</p>
     `;
-  }
-  
+  }  
+
   function countByField(data, field) {
     const counts = {};
     data.forEach(row => {
@@ -261,217 +346,222 @@ document.addEventListener('DOMContentLoaded', () => {
     return counts;
   }
 
-function showVisualizations() {
-  const unmatchedOrders = matchedFull.filter(row => {
-    return !row.Matched && !isDSDSupplier(row['Supplier'], row['Store']);
-  });
-
-  const unmatchedDeliveriesRaw = deliveriesFull.filter(delivery => {
-    return !ordersFull.some(order =>
-      normalize(order['No.']) === normalize(delivery['PO nos.'])
-    );
-  });
-
-  const unmatchedDeliveries = unmatchedDeliveriesRaw.filter(delivery => {
-    return !isDSDSupplier(delivery['Supplier'], delivery['Store']);
-  });  
-
-  const dsdDeliveries = unmatchedDeliveriesRaw.filter(delivery => {
-    return isDSDSupplier(delivery['Supplier'], delivery['Store']);
-  });
-
-  // CHART 1: Unmatched Orders by Supplier
-  const orderSupplierCounts = countByField(unmatchedOrders, 'Supplier');
-  const topOrderSuppliers = Object.entries(orderSupplierCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
-  const ctx1 = document.getElementById('chartCanvas1').getContext('2d');
-  if (window.chart1) window.chart1.destroy();
-  window.chart1 = new Chart(ctx1, {
-    type: 'bar',
-    data: {
-      labels: topOrderSuppliers.map(x => x[0]),
-      datasets: [{
-        label: 'Unmatched Orders by Supplier',
-        data: topOrderSuppliers.map(x => x[1]),
-        backgroundColor: 'rgba(255, 99, 132, 0.6)'
-      }]
-    },
-    options: { scales: { y: { beginAtZero: true } } }
-  });
-
-  // CHART 2: Unmatched Orders by Store
-  const orderStoreCounts = countByField(unmatchedOrders, 'Store');
-  const topOrderStores = Object.entries(orderStoreCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
-  const ctx2 = document.getElementById('chartCanvas2').getContext('2d');
-  if (window.chart2) window.chart2.destroy();
-  window.chart2 = new Chart(ctx2, {
-    type: 'bar',
-    data: {
-      labels: topOrderStores.map(x => x[0]),
-      datasets: [{
-        label: 'Unmatched Orders by Store',
-        data: topOrderStores.map(x => x[1]),
-        backgroundColor: 'rgba(54, 162, 235, 0.6)'
-      }]
-    },
-    options: { scales: { y: { beginAtZero: true } } }
-  });
-
-  // CHART 3: Unmatched Deliveries by Supplier (non-DSD)
-  const deliverySupplierCounts = countByField(unmatchedDeliveries, 'Supplier');
-  const topDeliverySuppliers = Object.entries(deliverySupplierCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
-  const ctx3 = document.getElementById('chartCanvas3').getContext('2d');
-  if (window.chart3) window.chart3.destroy();
-  window.chart3 = new Chart(ctx3, {
-    type: 'bar',
-    data: {
-      labels: topDeliverySuppliers.map(x => x[0]),
-      datasets: [{
-        label: 'Unmatched Deliveries by Supplier',
-        data: topDeliverySuppliers.map(x => x[1]),
-        backgroundColor: 'rgba(255, 206, 86, 0.6)'
-      }]
-    },
-    options: { scales: { y: { beginAtZero: true } } }
-  });
-
-  // CHART 4: Unmatched Deliveries by Store (non-DSD)
-  const deliveryStoreCounts = countByField(unmatchedDeliveries, 'Store');
-  const topDeliveryStores = Object.entries(deliveryStoreCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
-  const ctx4 = document.getElementById('chartCanvas4').getContext('2d');
-  if (window.chart4) window.chart4.destroy();
-  window.chart4 = new Chart(ctx4, {
-    type: 'bar',
-    data: {
-      labels: topDeliveryStores.map(x => x[0]),
-      datasets: [{
-        label: 'Unmatched Deliveries by Store',
-        data: topDeliveryStores.map(x => x[1]),
-        backgroundColor: 'rgba(153, 102, 255, 0.6)'
-      }]
-    },
-    options: { scales: { y: { beginAtZero: true } } }
-  });
-
-  // CHART 5: Unmatched Over Time
-  function getMonthKey(rawValue) {
-    if (!rawValue) return 'Unknown';
+  function showVisualizations() {
+    // const filteredOrders = ordersFull.filter(row => passesFilters(row));
+    // const filteredDeliveries = deliveriesFull.filter(row => passesFilters(row, 'Delivery date'));
   
-    let date;
+    const unmatchedOrders = filteredOrders.filter(order => {
+      return !filteredDeliveries.some(delivery =>
+        normalize(delivery['PO nos.']) === normalize(order['No.']) &&
+        normalize(delivery['Store']) === normalize(order['Store'])
+      ) && !isDSDSupplier(order['Supplier'], order['Store']);
+    });
   
-    if (typeof rawValue === 'number') {
-      // Excel serial number to JS Date
-      date = new Date(Math.round((rawValue - 25569) * 86400 * 1000));
-    } else {
-      const parsed = new Date(rawValue);
-      if (isNaN(parsed)) return 'Unknown';
-      date = parsed;
-    }
+    const unmatchedDeliveriesRaw = filteredDeliveries.filter(delivery => {
+      return !filteredOrders.some(order =>
+        normalize(order['No.']) === normalize(delivery['PO nos.']) &&
+        normalize(order['Store']) === normalize(delivery['Store'])
+      );
+    });
   
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-  }
+    const unmatchedDeliveries = unmatchedDeliveriesRaw.filter(delivery => {
+      return !isDSDSupplier(delivery['Supplier'], delivery['Store']);
+    });
   
-
-  const orderDateCounts = {};
-  unmatchedOrders.forEach(row => {
-    const rawDate = row['Ordered'];
-    const key = getMonthKey(rawDate);
-    if (key !== 'Unknown') {
-      orderDateCounts[key] = (orderDateCounts[key] || 0) + 1;
-    }
-  });
-
-  const deliveryDateCounts = {};
-  unmatchedDeliveries.forEach(row => {
-    const rawDate = row['Delivery date'];
-    const key = getMonthKey(rawDate);
-    if (key !== 'Unknown') {
-      deliveryDateCounts[key] = (deliveryDateCounts[key] || 0) + 1;
-    }
-  });
-
-  const allMonths = Array.from(new Set([...Object.keys(orderDateCounts), ...Object.keys(deliveryDateCounts)])).sort();
-
-  const ctx5 = document.getElementById('chartCanvas5').getContext('2d');
-  if (window.chart5) window.chart5.destroy();
-  window.chart5 = new Chart(ctx5, {
-    type: 'line',
-    data: {
-      labels: allMonths,
-      datasets: [
-        {
-          label: 'Unmatched Orders',
-          data: allMonths.map(m => orderDateCounts[m] || 0),
-          borderColor: 'rgba(255, 99, 132, 1)',
-          backgroundColor: 'rgba(255, 99, 132, 0.2)',
-          tension: 0.3,
-          fill: false
-        },
-        {
-          label: 'Unmatched Deliveries',
-          data: allMonths.map(m => deliveryDateCounts[m] || 0),
-          borderColor: 'orange',
-          backgroundColor: 'rgba(255, 165, 0, 0.2)',
-          tension: 0.3,
-          fill: false
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        title: {
-          display: true,
-          text: 'Unmatched Orders & Deliveries Over Time (Monthly)'
-        }
+    const dsdDeliveries = unmatchedDeliveriesRaw.filter(delivery => {
+      return isDSDSupplier(delivery['Supplier'], delivery['Store']);
+    });
+  
+    // CHART 1: Unmatched Orders by Supplier
+    const orderSupplierCounts = countByField(unmatchedOrders, 'Supplier');
+    const topOrderSuppliers = Object.entries(orderSupplierCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    const ctx1 = document.getElementById('chartCanvas1').getContext('2d');
+    if (window.chart1) window.chart1.destroy();
+    window.chart1 = new Chart(ctx1, {
+      type: 'bar',
+      data: {
+        labels: topOrderSuppliers.map(x => x[0]),
+        datasets: [{
+          label: 'Unmatched Orders by Supplier',
+          data: topOrderSuppliers.map(x => x[1]),
+          backgroundColor: 'rgba(255, 99, 132, 0.6)'
+        }]
       },
-      scales: {
-        x: {
-          title: { display: true, text: 'Month' }
+      options: { scales: { y: { beginAtZero: true } } }
+    });
+  
+    // CHART 2: Unmatched Orders by Store
+    const orderStoreCounts = countByField(unmatchedOrders, 'Store');
+    const topOrderStores = Object.entries(orderStoreCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    const ctx2 = document.getElementById('chartCanvas2').getContext('2d');
+    if (window.chart2) window.chart2.destroy();
+    window.chart2 = new Chart(ctx2, {
+      type: 'bar',
+      data: {
+        labels: topOrderStores.map(x => x[0]),
+        datasets: [{
+          label: 'Unmatched Orders by Store',
+          data: topOrderStores.map(x => x[1]),
+          backgroundColor: 'rgba(54, 162, 235, 0.6)'
+        }]
+      },
+      options: { scales: { y: { beginAtZero: true } } }
+    });
+  
+    // CHART 3: Unmatched Deliveries by Supplier (non-DSD)
+    const deliverySupplierCounts = countByField(unmatchedDeliveries, 'Supplier');
+    const topDeliverySuppliers = Object.entries(deliverySupplierCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    const ctx3 = document.getElementById('chartCanvas3').getContext('2d');
+    if (window.chart3) window.chart3.destroy();
+    window.chart3 = new Chart(ctx3, {
+      type: 'bar',
+      data: {
+        labels: topDeliverySuppliers.map(x => x[0]),
+        datasets: [{
+          label: 'Unmatched Deliveries by Supplier',
+          data: topDeliverySuppliers.map(x => x[1]),
+          backgroundColor: 'rgba(255, 206, 86, 0.6)'
+        }]
+      },
+      options: { scales: { y: { beginAtZero: true } } }
+    });
+  
+    // CHART 4: Unmatched Deliveries by Store (non-DSD)
+    const deliveryStoreCounts = countByField(unmatchedDeliveries, 'Store');
+    const topDeliveryStores = Object.entries(deliveryStoreCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    const ctx4 = document.getElementById('chartCanvas4').getContext('2d');
+    if (window.chart4) window.chart4.destroy();
+    window.chart4 = new Chart(ctx4, {
+      type: 'bar',
+      data: {
+        labels: topDeliveryStores.map(x => x[0]),
+        datasets: [{
+          label: 'Unmatched Deliveries by Store',
+          data: topDeliveryStores.map(x => x[1]),
+          backgroundColor: 'rgba(153, 102, 255, 0.6)'
+        }]
+      },
+      options: { scales: { y: { beginAtZero: true } } }
+    });
+  
+    // CHART 5: Unmatched Over Time
+    function getMonthKey(rawValue) {
+      if (!rawValue) return 'Unknown';
+  
+      let date;
+  
+      if (typeof rawValue === 'number') {
+        date = new Date(Math.round((rawValue - 25569) * 86400 * 1000));
+      } else {
+        const parsed = new Date(rawValue);
+        if (isNaN(parsed)) return 'Unknown';
+        date = parsed;
+      }
+  
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    }
+  
+    const orderDateCounts = {};
+    unmatchedOrders.forEach(row => {
+      const rawDate = row['Ordered'];
+      const key = getMonthKey(rawDate);
+      if (key !== 'Unknown') {
+        orderDateCounts[key] = (orderDateCounts[key] || 0) + 1;
+      }
+    });
+  
+    const deliveryDateCounts = {};
+    unmatchedDeliveries.forEach(row => {
+      const rawDate = row['Delivery date'];
+      const key = getMonthKey(rawDate);
+      if (key !== 'Unknown') {
+        deliveryDateCounts[key] = (deliveryDateCounts[key] || 0) + 1;
+      }
+    });
+  
+    const allMonths = Array.from(new Set([...Object.keys(orderDateCounts), ...Object.keys(deliveryDateCounts)])).sort();
+  
+    const ctx5 = document.getElementById('chartCanvas5').getContext('2d');
+    if (window.chart5) window.chart5.destroy();
+    window.chart5 = new Chart(ctx5, {
+      type: 'line',
+      data: {
+        labels: allMonths,
+        datasets: [
+          {
+            label: 'Unmatched Orders',
+            data: allMonths.map(m => orderDateCounts[m] || 0),
+            borderColor: 'rgba(255, 99, 132, 1)',
+            backgroundColor: 'rgba(255, 99, 132, 0.2)',
+            tension: 0.3,
+            fill: false
+          },
+          {
+            label: 'Unmatched Deliveries',
+            data: allMonths.map(m => deliveryDateCounts[m] || 0),
+            borderColor: 'orange',
+            backgroundColor: 'rgba(255, 165, 0, 0.2)',
+            tension: 0.3,
+            fill: false
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          title: {
+            display: true,
+            text: 'Unmatched Orders & Deliveries Over Time (Monthly)'
+          }
         },
-        y: {
-          beginAtZero: true,
-          title: { display: true, text: 'Count' }
+        scales: {
+          x: {
+            title: { display: true, text: 'Month' }
+          },
+          y: {
+            beginAtZero: true,
+            title: { display: true, text: 'Count' }
+          }
         }
       }
-    }
-  });
-
-  // CHART 6: DSD Deliveries by Supplier
-  const dsdSupplierCounts = countByField(dsdDeliveries, 'Supplier');
-  const topDsdSuppliers = Object.entries(dsdSupplierCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
-  const dsdCtx1 = document.getElementById('chartCanvas6').getContext('2d');
-  if (window.chart6) window.chart6.destroy();
-  window.chart6 = new Chart(dsdCtx1, {
-    type: 'bar',
-    data: {
-      labels: topDsdSuppliers.map(x => x[0]),
-      datasets: [{
-        label: 'DSD Deliveries by Supplier',
-        data: topDsdSuppliers.map(x => x[1]),
-        backgroundColor: 'rgba(255, 159, 64, 0.6)'
-      }]
-    },
-    options: { scales: { y: { beginAtZero: true } } }
-  });
-
-  // CHART 7: DSD Deliveries by Store
-  const dsdStoreCounts = countByField(dsdDeliveries, 'Store');
-  const topDsdStores = Object.entries(dsdStoreCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
-  const dsdCtx2 = document.getElementById('chartCanvas7').getContext('2d');
-  if (window.chart7) window.chart7.destroy();
-  window.chart7 = new Chart(dsdCtx2, {
-    type: 'bar',
-    data: {
-      labels: topDsdStores.map(x => x[0]),
-      datasets: [{
-        label: 'DSD Deliveries by Store',
-        data: topDsdStores.map(x => x[1]),
-        backgroundColor: 'rgba(75, 192, 192, 0.6)'
-      }]
-    },
-    options: { scales: { y: { beginAtZero: true } } }
-  });
-}
+    });
+  
+    // CHART 6: DSD Deliveries by Supplier
+    const dsdSupplierCounts = countByField(dsdDeliveries, 'Supplier');
+    const topDsdSuppliers = Object.entries(dsdSupplierCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    const dsdCtx1 = document.getElementById('chartCanvas6').getContext('2d');
+    if (window.chart6) window.chart6.destroy();
+    window.chart6 = new Chart(dsdCtx1, {
+      type: 'bar',
+      data: {
+        labels: topDsdSuppliers.map(x => x[0]),
+        datasets: [{
+          label: 'DSD Deliveries by Supplier',
+          data: topDsdSuppliers.map(x => x[1]),
+          backgroundColor: 'rgba(255, 159, 64, 0.6)'
+        }]
+      },
+      options: { scales: { y: { beginAtZero: true } } }
+    });
+  
+    // CHART 7: DSD Deliveries by Store
+    const dsdStoreCounts = countByField(dsdDeliveries, 'Store');
+    const topDsdStores = Object.entries(dsdStoreCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    const dsdCtx2 = document.getElementById('chartCanvas7').getContext('2d');
+    if (window.chart7) window.chart7.destroy();
+    window.chart7 = new Chart(dsdCtx2, {
+      type: 'bar',
+      data: {
+        labels: topDsdStores.map(x => x[0]),
+        datasets: [{
+          label: 'DSD Deliveries by Store',
+          data: topDsdStores.map(x => x[1]),
+          backgroundColor: 'rgba(75, 192, 192, 0.6)'
+        }]
+      },
+      options: { scales: { y: { beginAtZero: true } } }
+    });
+  }  
 
 
   function showLoading() {
@@ -646,21 +736,34 @@ function showVisualizations() {
       });
   
       const deliveryDateCol = "Delivery date";
+      const changedDateCol = "Changed";
       const priceCol = "Price";
+
   
-      // Correct date parsing
       df.forEach(row => {
-        const raw = row[deliveryDateCol];
-        let parsedDate;
+        const rawDelivery = row[deliveryDateCol];
+        let parsedDelivery;
   
-        if (typeof raw === 'number') {
-          parsedDate = new Date(Math.round((raw - 25569) * 86400 * 1000));
+        if (typeof rawDelivery === 'number') {
+          parsedDelivery = new Date(Math.round((rawDelivery - 25569) * 86400 * 1000));
         } else {
-          const str = String(raw || "").split(" ")[0];
-          parsedDate = new Date(str);
+          const str = String(rawDelivery || "").split(" ")[0];
+          parsedDelivery = new Date(str);
         }
   
-        row[deliveryDateCol] = parsedDate;
+        row[deliveryDateCol] = parsedDelivery;
+  
+        const rawChanged = row[changedDateCol];
+        let parsedChanged;
+        if (typeof rawChanged === 'number') {
+          parsedChanged = new Date(Math.round((rawChanged - 25569) * 86400 * 1000));
+        } else {
+          const str = String(rawChanged || "").split(" ")[0];
+          parsedChanged = new Date(str);
+        }
+  
+        row[changedDateCol] = parsedChanged;
+  
         row[priceCol] = parseFloat(row[priceCol]) || 0;
       });
   
@@ -706,47 +809,32 @@ function showVisualizations() {
   
           const diff = Math.abs(dining - fiscal);
   
-          results.push({
-            year,
-            month,
-            "Month / Year": `${month}/${year}`,
-            "Dining Finances": dining.toFixed(2),
-            "Fiscal Finances": fiscal.toFixed(2),
-            "Absolute Differences": diff.toFixed(2)
-          });
-        });
-      });
+          // NEW: Processing delay breakdown
+          const relevantRows = df.filter(row =>
+            row[deliveryDateCol].getMonth() === month - 1 &&
+            row[deliveryDateCol].getFullYear() === year &&
+            row[changedDateCol] > row[deliveryDateCol]
+          );
   
-      const outputDiv = document.getElementById("financialResults");
-      outputDiv.innerHTML = "";
+          let buckets = {
+            "<1 week": { count: 0, total: 0 },
+            "1-2 weeks": { count: 0, total: 0 },
+            "2-3 weeks": { count: 0, total: 0 },
+            ">1 month": { count: 0, total: 0 }
+          };
   
-      results.forEach(result => {
-        const table = document.createElement("table");
-        table.classList.add("financial-table");
+          let totalDelay = 0;
   
-        const title = document.createElement("h3");
-        title.textContent = `Financial Analysis for ${result["Month / Year"]}`;
-        outputDiv.appendChild(title);
+          relevantRows.forEach(row => {
+            const delay = Math.floor((row[changedDateCol] - row[deliveryDateCol]) / (1000 * 60 * 60 * 24));
+            totalDelay += delay;
   
-        const headerRow = document.createElement("tr");
-        Object.keys(result).slice(2).forEach(key => {
-          const th = document.createElement("th");
-          th.textContent = key;
-          headerRow.appendChild(th);
-        });
-        table.appendChild(headerRow);
-  
-        const dataRow = document.createElement("tr");
-        Object.values(result).slice(2).forEach(val => {
-          const td = document.createElement("td");
-          td.textContent = val;
-          dataRow.appendChild(td);
-        });
-        table.appendChild(dataRow);
-        outputDiv.appendChild(table);
-      });
-    };
-  
-    reader.readAsArrayBuffer(file);
-  };  
-});
+            if (delay < 7) {
+              buckets["<1 week"].count++;
+              buckets["<1 week"].total += row[priceCol];
+            } else if (delay < 14) {
+              buckets["1-2 weeks"].count++;
+              buckets["1-2 weeks"].total += row[priceCol];
+            } else if (delay < 21) {
+              buckets["2-3 weeks"].count++;
+              buckets["2-3 weeks"].total += row

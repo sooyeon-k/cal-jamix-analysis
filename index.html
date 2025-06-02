@@ -150,6 +150,16 @@
       <input type="file" id="deliveriesInput" multiple accept=".csv, .xls, .xlsx">
     </div>
 
+    <div class="section">
+      <label for="storeFilter">Filter by Store(s):</label>
+      <select id="storeFilter" multiple size="6"></select>
+    
+      <div style="margin-top: 10px; display: flex; gap: 10px;">
+        <button id="storeFilterButton">Apply Filters</button>
+        <button id="clearFilterButton">Clear Filters</button> <!-- ✅ New button -->
+      </div>
+    </div>
+
     <div class="download-section">
       <div class="download-group">
         <button class="download-button" onclick="toggleMenu('menuMerged')">Download Full Merged Dataset</button>
