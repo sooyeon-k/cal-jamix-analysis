@@ -145,16 +145,11 @@ document.addEventListener('DOMContentLoaded', () => {
               return;
             }
   
-            const headers = raw[0]; // Use first row as headers
-            const rows = raw.slice(1).filter(row => {
+            const headers = raw[1]; // Use second row as headers
+            const rows = raw.slice(2).filter(row => {
               return row.join('').trim() !== '' && !row.includes('TOTAL');
             });
-
-            if (!rawData || rawData.length === 0 || !rawData[0] || rawData[0].length === 0) {
-            reject(new Error('Excel file is empty or missing headers'));
-            return;
-            }
-
+  
             const formattedData = rows.map(row => {
               const obj = {};
               headers.forEach((header, idx) => {
@@ -186,8 +181,8 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
           }
   
-          const headers = rawData[0]; // Use first row as headers
-          const dataRows = rawData.slice(1).filter(row => {
+          const headers = rawData[1]; // Use second row as headers
+          const dataRows = rawData.slice(2).filter(row => {
             return row.join('').trim() !== '' && !row.includes('TOTAL');
           });
   
@@ -729,20 +724,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const sheet = workbook.Sheets[sheetName];
       const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
   
-      const headers = rawData[0];
-      if (!headers || headers.length === 0) {
-        alert("Error: Excel file must have at least one row of headers.");
-        return;
-      }
-
-      if (!rawData || rawData.length === 0 || !rawData[0] || rawData[0].length === 0) {
-      reject(new Error('Excel file is empty or missing headers'));
-      return;
-      }
-      
-      const rows = rawData.slice(1).filter(row =>
-        row.join('').trim() !== '' && !row.includes('TOTAL')
-      );
+      const headers = rawData[1];
+      const rows = rawData.slice(2).filter(row => row.join('').trim() !== '' && !row.includes('TOTAL'));
   
       const df = rows.map(row => {
         const obj = {};
@@ -854,4 +837,100 @@ document.addEventListener('DOMContentLoaded', () => {
               buckets["1-2 weeks"].total += row[priceCol];
             } else if (delay < 21) {
               buckets["2-3 weeks"].count++;
-              buckets["2-3 weeks"].total += row
+              buckets["2-3 weeks"].total += row[priceCol];
+            } else {
+              buckets[">1 month"].count++;
+              buckets[">1 month"].total += row[priceCol];
+            }
+          });
+  
+          const avgDelay = relevantRows.length ? (totalDelay / relevantRows.length).toFixed(2) : "0.00";
+  
+          results.push({
+            year,
+            month,
+            "Month / Year": `${month}/${year}`,
+            "Dining Finances": dining.toFixed(2),
+            "Fiscal Finances": fiscal.toFixed(2),
+            "Absolute Differences": diff.toFixed(2),
+            "<1 week Deliveries": buckets["<1 week"].count,
+            "<1 week Total ($)": buckets["<1 week"].total.toFixed(2),
+            "1-2 weeks Deliveries": buckets["1-2 weeks"].count,
+            "1-2 weeks Total ($)": buckets["1-2 weeks"].total.toFixed(2),
+            "2-3 weeks Deliveries": buckets["2-3 weeks"].count,
+            "2-3 weeks Total ($)": buckets["2-3 weeks"].total.toFixed(2),
+            ">1 month Deliveries": buckets[">1 month"].count,
+            ">1 month Total ($)": buckets[">1 month"].total.toFixed(2),
+            "Avg. Processing Delay (days)": avgDelay
+          });
+        });
+      });
+  
+      const outputDiv = document.getElementById("financialResults");
+      outputDiv.innerHTML = "";
+  
+      results.forEach(result => {
+        const table = document.createElement("table");
+        table.classList.add("financial-table");
+  
+        const title = document.createElement("h3");
+        title.textContent = `Financial Analysis for ${result["Month / Year"]}`;
+        outputDiv.appendChild(title);
+  
+        const fullKeys = Object.keys(result);
+        const mainKeys = fullKeys.slice(2, 5); // Month / Year, Dining, Fiscal, Absolute
+        const delayKeys = fullKeys.slice(5);   // All delay-related metrics
+
+        // Main financials header and row
+        const mainHeaderRow = document.createElement("tr");
+        mainKeys.forEach(key => {
+          const th = document.createElement("th");
+          th.textContent = key;
+          mainHeaderRow.appendChild(th);
+        });
+        table.appendChild(mainHeaderRow);
+
+        const mainDataRow = document.createElement("tr");
+        mainKeys.forEach(key => {
+          const td = document.createElement("td");
+          td.textContent = result[key];
+          mainDataRow.appendChild(td);
+        });
+        table.appendChild(mainDataRow);
+
+        // Spacer
+        const spacer = document.createElement("tr");
+        const spacerCell = document.createElement("td");
+        spacerCell.colSpan = delayKeys.length;
+        spacerCell.innerHTML = "&nbsp;";
+        spacer.appendChild(spacerCell);
+        table.appendChild(spacer);
+
+        // Processing delay breakdown header and row
+        const delayHeaderRow = document.createElement("tr");
+        delayKeys.forEach(key => {
+          const th = document.createElement("th");
+          th.textContent = key;
+          delayHeaderRow.appendChild(th);
+        });
+        table.appendChild(delayHeaderRow);
+
+        const delayDataRow = document.createElement("tr");
+        delayKeys.forEach(key => {
+          const td = document.createElement("td");
+          td.textContent = result[key];
+          delayDataRow.appendChild(td);
+        });
+        table.appendChild(delayDataRow);
+
+        outputDiv.appendChild(table);
+      });
+    };
+  
+    reader.readAsArrayBuffer(file);
+  };
+  
+
+});
+
+document.getElementById('storeFilterButton').addEventListener('click', applyFilters);
