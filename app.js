@@ -145,11 +145,16 @@ document.addEventListener('DOMContentLoaded', () => {
               return;
             }
   
-            const headers = raw[0]; // Use second row as headers
+            const headers = raw[0]; // Use first row as headers
             const rows = raw.slice(1).filter(row => {
               return row.join('').trim() !== '' && !row.includes('TOTAL');
             });
-  
+
+            if (!rawData || rawData.length === 0 || !rawData[0] || rawData[0].length === 0) {
+            reject(new Error('Excel file is empty or missing headers'));
+            return;
+            }
+
             const formattedData = rows.map(row => {
               const obj = {};
               headers.forEach((header, idx) => {
@@ -181,7 +186,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
           }
   
-          const headers = rawData[0]; // Use second row as headers
+          const headers = rawData[0]; // Use first row as headers
           const dataRows = rawData.slice(1).filter(row => {
             return row.join('').trim() !== '' && !row.includes('TOTAL');
           });
@@ -724,8 +729,20 @@ document.addEventListener('DOMContentLoaded', () => {
       const sheet = workbook.Sheets[sheetName];
       const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
   
-      const headers = rawData[1];
-      const rows = rawData.slice(2).filter(row => row.join('').trim() !== '' && !row.includes('TOTAL'));
+      const headers = rawData[0];
+      if (!headers || headers.length === 0) {
+        alert("Error: Excel file must have at least one row of headers.");
+        return;
+      }
+
+      if (!rawData || rawData.length === 0 || !rawData[0] || rawData[0].length === 0) {
+      reject(new Error('Excel file is empty or missing headers'));
+      return;
+      }
+      
+      const rows = rawData.slice(1).filter(row =>
+        row.join('').trim() !== '' && !row.includes('TOTAL')
+      );
   
       const df = rows.map(row => {
         const obj = {};
