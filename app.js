@@ -145,8 +145,8 @@ document.addEventListener('DOMContentLoaded', () => {
               return;
             }
   
-            const headers = raw[1]; // Use second row as headers
-            const rows = raw.slice(2).filter(row => {
+            const headers = raw[0]; // Use second row as headers
+            const rows = raw.slice(1).filter(row => {
               return row.join('').trim() !== '' && !row.includes('TOTAL');
             });
   
@@ -181,8 +181,8 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
           }
   
-          const headers = rawData[1]; // Use second row as headers
-          const dataRows = rawData.slice(2).filter(row => {
+          const headers = rawData[0]; // Use second row as headers
+          const dataRows = rawData.slice(1).filter(row => {
             return row.join('').trim() !== '' && !row.includes('TOTAL');
           });
   
