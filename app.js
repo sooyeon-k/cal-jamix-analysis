@@ -900,7 +900,7 @@ window.submitFinancialAnalysis = function () {
       const row = document.createElement("tr");
       k.forEach(key => {
         const cell = document.createElement(hdr ? "th" : "td");
-        cell.textContent = res[key];
+        cell.textContent = hdr ? key : res[key];  // key for header, value for data
         row.appendChild(cell);
       });
       return row;
