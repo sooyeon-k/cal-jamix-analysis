@@ -130,10 +130,48 @@
       display: block;
     }
 
+    .financial-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 2rem;
+    font-size: 0.8rem; /* smaller text */
+    text-align: center;
+    }
+
+    .financial-table th,
+    .financial-table td {
+      padding: 6px 8px;
+      border: 1px solid #ccc;
+      vertical-align: middle;
+    }
+
+    .financial-table th {
+      background-color: #f5f5f5;
+      font-weight: 600;
+      font-size: 0.75rem;
+    }
+
+    .financial-table tr:nth-child(even) {
+      background-color: #fafafa;
+    }
+
+    .financial-table h3 {
+      font-size: 1rem;
+      margin-bottom: 0.5rem;
+      text-align: center;
+    }
+
+    .financial-table tr td[colspan] {
+      background-color: #f9f9f9;
+      height: 8px;
+      border: none;
+    }
+
     canvas {
       margin-bottom: 40px;
     }
   </style>
+
 </head>
 
 <body>
@@ -247,7 +285,7 @@
         <option value="12">December</option>
       </select>
 
-      <!--Select year -- this is manual input, unfortunately-->
+      <!--Select year -- this is manual input -->
       <label for="yearSelect">Year(s):</label>
       <select id="yearSelect" multiple size="4">
         <option value="" disabled selected>Select year</option>
@@ -258,6 +296,7 @@
 
     <button onclick="submitFinancialAnalysis()">Run Analysis</button>
 
+    <canvas id="delayOverTimeChart" width="800" height="400" style="margin-top: 30px;"></canvas>
 
     <div class="section" id="financialResults"></div>
   </div>
